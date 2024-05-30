@@ -9,6 +9,21 @@ Think a bit about the row counts: how many distinct vendors, product names are t
 How many customers are there (y). 
 Before your final group by you should have the product of those two queries (x*y).  */
 
+SELECT v.vendor_name, p.product_name,
+SUM(sub.total_sales) AS total_sales_per_product
+	FROM 
+(SELECT
+		vi.vendor_id,
+		vi.product_id,
+		COUNT(*)* 5* vi.original_price AS total_sales
+FROM 
+	vendor_inventory vi
+CROSS JOIN customer as c
+GROUP by vi.vendor_id, vi.product_id) AS sub
+JOIN vendor v ON sub.vendor_id = v.vendor_id
+JOIN product p ON sub.product_id = p.product_id
+GROUP BY v.vendor_name, p.product_name;
+
 
 
 -- INSERT
@@ -17,11 +32,19 @@ This table will contain only products where the `product_qty_type = 'unit'`.
 It should use all of the columns from the product table, as well as a new column for the `CURRENT_TIMESTAMP`.  
 Name the timestamp column `snapshot_timestamp`. */
 
+DROP TABLE if EXISTS temp.product_units;
+CREATE temp table product_units as
+SELECT *, current_timestamp as snapshot_timestamp
+FROM product
+WHERE product_qty_type = 'unit';
 
 
 /*2. Using `INSERT`, add a new row to the product_units table (with an updated timestamp). 
 This can be any product you desire (e.g. add another record for Apple Pie). */
 
+INSERT INTO product_units
+values (24, 'Apple Pie', '15"', 3, 'unit', CURRENT_TIMESTAMP);
+SELECT * from product_units;
 
 
 -- DELETE
@@ -29,7 +52,13 @@ This can be any product you desire (e.g. add another record for Apple Pie). */
 
 HINT: If you don't specify a WHERE clause, you are going to have a bad time.*/
 
-
+DELETE from product_units
+WHERE 
+    product_name = 'Apple Pie'
+    AND snapshot_timestamp = (
+        SELECT MIN(snapshot_timestamp)
+        FROM product_units
+        WHERE product_name = 'Apple Pie')
 
 -- UPDATE
 /* 1.We want to add the current_quantity to the product_units table. 
@@ -49,3 +78,17 @@ Finally, make sure you have a WHERE statement to update the right row,
 When you have all of these components, you can run the update statement. */
 
 
+ALTER TABLE product_units
+ADD current_quantity INT;
+
+UPDATE product_units
+SET current_quantity = (
+    SELECT COALESCE(MAX(quantity), 0) 
+    FROM vendor_inventory 
+    WHERE vendor_inventory.product_id = product_units.product_id
+)
+WHERE EXISTS (
+    SELECT 1 
+    FROM vendor_inventory 
+    WHERE vendor_inventory.product_id = product_units.product_id
+);
